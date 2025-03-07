@@ -4,46 +4,37 @@ run-name: Build process
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "main"
+  pull_request: {}
   schedule:
-    - cron: '0 0 1 */2 *'
+    - cron: '0 0 1 */2 *'  
 
 jobs:
-  build:
+
+  trigger-build-diskimage-almalinux9:
     runs-on: ubuntu-latest
-    container: 
-      image: docker.io/library/almalinux:9
-      options: --privileged
-
     steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: |
-          dnf install -y \
-            lorax util-linux
-
-      # Output directoruy should NOT exist
-      #- name: Prepare
-      #  run: mkdir output
-
-      - name: Set release tag
-        run: echo "TAG=$(date +'%y%m%d')" >> $GITHUB_ENV
-
-      - name: Build AlmaLinux ISO
-        run: |
-          lorax -p AlmaLinux-UNOFFICIAL -v 9 -r 9 \
-            -s https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/ \
-            -s https://repo.almalinux.org/almalinux/9/AppStream/x86_64/os/ \
-            -s https://repo.almalinux.org/almalinux/9/extras/x86_64/os/ \
-            output
-      
-      - name: Rename file
-        run: |
-          mv output/images/boot.iso output/images/boot-${{ env.TAG }}.iso
-
-      - name: Upload Artifact - AlmaLinux ISO
-        uses: actions/upload-artifact@v4
+      - name: Start diskimage build - AlmaLinux 9
+        uses: actions/github-script@v7
         with:
-          name: AlmaLinux
-          path: |
-            output/images/*.iso
-          retention-days: 30
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build-diskimage-almalinux9-upload.yml',
+              ref: context.ref,
+            });
+
+
+  wait-for-build-diskimage-almalinux9:
+    runs-on: ubuntu-latest
+    needs: trigger-build-diskimage-almalinux9
+    steps:
+      - name: Wait for build-diskimages almalinux9 to complete
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.ref }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }} 
+          check-name: 'build-diskimage-almalinux9'  # does not show (ubuntu-latest) as it runs a container
+          wait-interval: 10
