@@ -1,0 +1,49 @@
+name: build process
+run-name: Build process
+
+on:
+  workflow_dispatch:
+  push:
+  schedule:
+    - cron: '0 0 1 */2 *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: 
+      image: docker.io/library/almalinux:9
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          dnf install -y \
+            lorax util-linux
+
+      # Output directoruy should NOT exist
+      #- name: Prepare
+      #  run: mkdir output
+
+      - name: Set release tag
+        run: echo "TAG=$(date +'%y%m%d')" >> $GITHUB_ENV
+
+      - name: Build AlmaLinux ISO
+        run: |
+          lorax -p AlmaLinux-UNOFFICIAL -v 9 -r 9 \
+            -s https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/ \
+            -s https://repo.almalinux.org/almalinux/9/AppStream/x86_64/os/ \
+            -s https://repo.almalinux.org/almalinux/9/extras/x86_64/os/ \
+            output
+      
+      - name: Rename file
+        run: |
+          mv output/images/boot.iso output/images/boot-${{ env.TAG }}.iso
+
+      - name: Upload Artifact - AlmaLinux ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlmaLinux
+          path: |
+            output/images/*.iso
+          retention-days: 30
